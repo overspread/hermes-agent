@@ -6,6 +6,21 @@ This wrapper should behave like the installed `hermes` command, including
 subcommands such as `gateway`, `cron`, and `doctor`.
 """
 
-if __name__ == "__main__":
+import sys
+import os
+from pathlib import Path
+
+
+def main():
+    # If we're in the repo tree and a venv exists, use it
+    script_dir = Path(__file__).resolve().parent
+    venv_python = script_dir / ".venv" / "bin" / "python"
+    if venv_python.exists():
+        os.execv(str(venv_python), [str(venv_python), "-m", "hermes_cli.main"] + sys.argv[1:])
+
     from hermes_cli.main import main
+    main()
+
+
+if __name__ == "__main__":
     main()
