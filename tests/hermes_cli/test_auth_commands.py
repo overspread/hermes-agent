@@ -790,6 +790,17 @@ def test_clear_provider_auth_removes_provider_pool_entries(tmp_path, monkeypatch
     )
 
     from hermes_cli.auth import clear_provider_auth
+    from hermes_cli.models import _provider_models_cache_path
+
+    cache_path = _provider_models_cache_path()
+    cache_path.write_text(
+        json.dumps(
+            {
+                "anthropic": {"models": ["claude-test"], "ts": 1, "fp": "old"},
+                "openrouter": {"models": ["openai/gpt-test"], "ts": 1, "fp": "old"},
+            }
+        )
+    )
 
     assert clear_provider_auth("anthropic") is True
 
@@ -798,6 +809,10 @@ def test_clear_provider_auth_removes_provider_pool_entries(tmp_path, monkeypatch
     assert "anthropic" not in payload.get("providers", {})
     assert "anthropic" not in payload.get("credential_pool", {})
     assert "openrouter" in payload.get("credential_pool", {})
+
+    cache_payload = json.loads(cache_path.read_text())
+    assert "anthropic" not in cache_payload
+    assert "openrouter" in cache_payload
 
 
 def test_logout_resets_codex_config_when_auth_state_already_cleared(tmp_path, monkeypatch, capsys):

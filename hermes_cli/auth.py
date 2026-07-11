@@ -1435,6 +1435,13 @@ def clear_provider_auth(provider_id: Optional[str] = None) -> bool:
         if not cleared:
             return False
         _save_auth_store(auth_store)
+
+    try:
+        from hermes_cli.models import clear_provider_models_cache
+
+        clear_provider_models_cache(target)
+    except Exception:
+        pass
     return True
 
 

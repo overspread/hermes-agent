@@ -63,6 +63,32 @@ class TestEnsureHermesHome:
             assert soul_path.read_text(encoding="utf-8") == "custom soul"
 
 
+class TestSaveConfigInvalidatesModelProviderCache:
+    def test_save_config_provider_change_clears_provider_models_cache(self, tmp_path):
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            cache_path = tmp_path / "provider_models_cache.json"
+            cache_path.write_text(
+                '{"stepfun": {"models": ["step-3.5-flash"], "ts": 1, "fp": "old"}}',
+                encoding="utf-8",
+            )
+            save_config({"providers": {"stepfun": {"base_url": "https://example.test/v1"}}})
+            save_config({"providers": {}})
+
+            assert not cache_path.exists()
+
+    def test_save_config_unrelated_change_keeps_provider_models_cache(self, tmp_path):
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            save_config({"display": {"interim_assistant_messages": True}})
+            cache_path = tmp_path / "provider_models_cache.json"
+            cache_path.write_text(
+                '{"nvidia": {"models": ["nvidia/model"], "ts": 1, "fp": "old"}}',
+                encoding="utf-8",
+            )
+            save_config({"display": {"interim_assistant_messages": False}})
+
+            assert cache_path.exists()
+
+
 class TestLoadConfigDefaults:
     def test_returns_defaults_when_no_file(self, tmp_path):
         with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):

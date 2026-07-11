@@ -5953,6 +5953,27 @@ _COMMENTED_SECTIONS = """
 """
 
 
+def _model_provider_cache_fingerprint(config: Any) -> Dict[str, Any]:
+    """Return the config subset that controls model/provider picker rows."""
+    if not isinstance(config, dict):
+        return {}
+    return {
+        "model": copy.deepcopy(config.get("model")),
+        "providers": copy.deepcopy(config.get("providers")),
+        "custom_providers": copy.deepcopy(config.get("custom_providers")),
+        "fallback_model": copy.deepcopy(config.get("fallback_model")),
+    }
+
+
+def _clear_provider_models_cache_after_config_change() -> None:
+    try:
+        from hermes_cli.models import clear_provider_models_cache
+
+        clear_provider_models_cache()
+    except Exception:
+        pass
+
+
 def save_config(config: Dict[str, Any]):
     """Save configuration to ~/.hermes/config.yaml."""
     with _CONFIG_LOCK:
@@ -5982,12 +6003,14 @@ def save_config(config: Dict[str, Any]):
         current_normalized = _normalize_root_model_keys(_normalize_max_turns_config(config))
         normalized = current_normalized
         raw_existing = _normalize_root_model_keys(_normalize_max_turns_config(read_raw_config()))
+        old_model_provider_fp = _model_provider_cache_fingerprint(raw_existing)
         if raw_existing:
             normalized = _preserve_env_ref_templates(
                 normalized,
                 raw_existing,
                 _LAST_EXPANDED_CONFIG_BY_PATH.get(str(config_path)),
             )
+        new_model_provider_fp = _model_provider_cache_fingerprint(normalized)
 
         # Build optional commented-out sections for features that are off by
         # default or only relevant when explicitly configured.
@@ -6011,6 +6034,8 @@ def save_config(config: Dict[str, Any]):
         )
         _secure_file(config_path)
         _LAST_EXPANDED_CONFIG_BY_PATH[str(config_path)] = copy.deepcopy(current_normalized)
+        if old_model_provider_fp != new_model_provider_fp:
+            _clear_provider_models_cache_after_config_change()
 
 
 def load_env() -> Dict[str, str]:
@@ -6825,6 +6850,7 @@ def set_config_value(key: str, value: str):
                 user_config = yaml.safe_load(f) or {}
         except Exception:
             user_config = {}
+    old_model_provider_fp = _model_provider_cache_fingerprint(user_config)
     
     # Handle nested keys (e.g., "tts.provider") including numeric list
     # indices (e.g., "custom_providers.0.api_key").  Delegates to
@@ -6855,6 +6881,8 @@ def set_config_value(key: str, value: str):
     ensure_hermes_home()
     from utils import atomic_yaml_write
     atomic_yaml_write(config_path, user_config, sort_keys=False)
+    if old_model_provider_fp != _model_provider_cache_fingerprint(user_config):
+        _clear_provider_models_cache_after_config_change()
     
     # Keep .env in sync for keys that terminal_tool reads directly from env vars.
     # config.yaml is authoritative, but terminal_tool only reads TERMINAL_ENV etc.
