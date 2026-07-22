@@ -979,6 +979,15 @@ DEFAULT_CONFIG = {
     "fallback_providers": [],
     "credential_pool_strategies": {},
     "toolsets": ["hermes-cli"],
+    # Model routing preferences — controls how Hermes resolves ambiguous model
+    # names that appear under multiple configured providers.  When a typed
+    # model name (e.g. ``deepseek-v4-flash``) is declared by more than one
+    # user/custom provider, the first provider listed here wins instead of
+    # raising an ambiguity error.  Empty / absent = fall back to legacy
+    # sorted-first behaviour (no error, just picks alphabetically).
+    "model_routing": {
+        "preferred_providers": [],
+    },
     # Global active chat session cap across CLI, TUI/dashboard, and messaging.
     # None/0 = unbounded.
     "max_concurrent_sessions": None,
@@ -6454,9 +6463,18 @@ def _strip_default_values(
     when the user has nothing to say about them.
     """
     preserve_keys = {("_config_version",)} | set(preserve_keys or ())
+    _STRIP = object()
+
+    def _is_provider_model_declaration(path: Tuple[str, ...]) -> bool:
+        # Provider model catalogs commonly use ``model-id: null`` as a valid
+        # declaration.  ``None`` is also the strip sentinel's old value, so these
+        # paths need an explicit keep rule even when the value equals the
+        # missing/default value.  Without this, Telegram /model persistence can
+        # delete entries like ``providers.maoyulin.models.deepseek-v4-flash``.
+        return len(path) >= 4 and path[0] == "providers" and path[2] == "models"
 
     def _strip(value: Any, default: Any, path: Tuple[str, ...]) -> Any:
-        if path in preserve_keys:
+        if path in preserve_keys or _is_provider_model_declaration(path):
             return copy.deepcopy(value)
 
         if isinstance(value, dict) and value:
@@ -6465,22 +6483,22 @@ def _strip_default_values(
             for key, child in value.items():
                 child_default = default_dict.get(key)
                 stripped_child = _strip(child, child_default, path + (key,))
-                if stripped_child is not None:
+                if stripped_child is not _STRIP:
                     stripped[key] = stripped_child
             if stripped:
                 return stripped
             # Entire subtree stripped — remove it
-            return None
+            return _STRIP
 
         if value == default:
-            return None
+            return _STRIP
 
         return copy.deepcopy(value)
 
     result: Dict[str, Any] = {}
     for key, value in config.items():
         stripped = _strip(value, defaults.get(key), (key,))
-        if stripped is not None:
+        if stripped is not _STRIP:
             result[key] = stripped
     return result
 

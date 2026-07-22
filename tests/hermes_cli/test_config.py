@@ -108,6 +108,43 @@ class TestEnsureHermesHome:
 
 
 class TestSaveConfigInvalidatesModelProviderCache:
+    def test_save_config_preserves_explicit_null_model_declarations(self, tmp_path):
+        """Provider model declarations often use ``model-id: null``.
+
+        ``save_config`` strips default-valued fields with an internal sentinel;
+        it must not confuse a real YAML null model declaration with "strip this
+        key" or Telegram /model persistence will delete user-configured models.
+        """
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            initial = {
+                "model": {"default": "old-model", "provider": "maoyulin"},
+                "providers": {
+                    "maoyulin": {
+                        "base_url": "https://maoyulin.example/v1",
+                        "api_key": "${MAOYULIN_API_KEY}",
+                        "api_mode": "chat_completions",
+                        "models": {
+                            "deepseek-v4-flash": None,
+                            "kimi-k2.6": None,
+                        },
+                    }
+                },
+            }
+            save_config(initial)
+
+            # Simulate the Telegram /model persist path: load raw YAML, mutate
+            # only the active model stanza, then call save_config(cfg).
+            cfg = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
+            cfg["model"]["default"] = "deepseek-v4-flash"
+            save_config(cfg)
+
+            saved = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
+            models = saved["providers"]["maoyulin"]["models"]
+            assert "deepseek-v4-flash" in models
+            assert "kimi-k2.6" in models
+            assert models["deepseek-v4-flash"] is None
+            assert models["kimi-k2.6"] is None
+
     def test_save_config_provider_change_clears_provider_models_cache(self, tmp_path):
         with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
             cache_path = tmp_path / "provider_models_cache.json"

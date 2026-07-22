@@ -1101,18 +1101,51 @@ def switch_model(
                 else:
                     match_slugs = sorted(cfg_matches)
                     if len(match_slugs) > 1:
-                        return ModelSwitchResult(
-                            success=False,
-                            is_global=is_global,
-                            error_message=(
-                                f"'{new_model}' is declared by multiple configured "
-                                f"providers ({', '.join(match_slugs)}). Re-run with "
-                                f"--provider <slug> to choose which one to use."
-                            ),
-                        )
-                    target_provider = match_slugs[0]
-                    new_model = cfg_matches[target_provider]
-                    config_routed = True
+                        # --- Prefer configured preferred_providers over erroring ---
+                        import os
+                        preferred = []
+                        try:
+                            from hermes_cli.config import load_config
+                            _mr = (load_config().get("model_routing") or {})
+                            _raw_preferred = _mr.get("preferred_providers", []) or []
+                            if isinstance(_raw_preferred, str):
+                                preferred = [p.strip() for p in _raw_preferred.split(",") if p.strip()]
+                            else:
+                                preferred = list(_raw_preferred)
+                        except Exception:
+                            pass
+                        # Also honour HERMES_MODEL_ROUTING_PREFERRED env var as fallback
+                        if not preferred:
+                            _env = os.environ.get("HERMES_MODEL_ROUTING_PREFERRED", "").strip()
+                            if _env:
+                                preferred = [p.strip() for p in _env.split(",") if p.strip()]
+                        for slug in preferred:
+                            if slug in cfg_matches:
+                                target_provider = slug
+                                new_model = cfg_matches[target_provider]
+                                config_routed = True
+                                logger.debug(
+                                    "Configured-provider detection routed '%s' to %s "
+                                    "(via preferred_providers)",
+                                    new_model, target_provider,
+                                )
+                                break
+                        if not config_routed:
+                            return ModelSwitchResult(
+                                success=False,
+                                is_global=is_global,
+                                error_message=(
+                                    f"'{new_model}' is declared by multiple configured "
+                                    f"providers ({', '.join(match_slugs)}). Re-run with "
+                                    f"--provider <slug> to choose which one to use."
+                                ),
+                            )
+                    else:
+                        target_provider = match_slugs[0]
+                        new_model = cfg_matches[target_provider]
+                        config_routed = True
+                    if config_routed and isinstance(user_providers, dict) and target_provider in user_providers:
+                        explicit_provider = target_provider
                     logger.debug(
                         "Configured-provider detection routed '%s' to %s",
                         new_model, target_provider,
