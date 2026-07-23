@@ -605,14 +605,27 @@ def _moa_provider_row(current_provider: str = "") -> dict | None:
 
     Shared by the CLI inventory (:func:`build_models_payload`) and the gateway
     picker path (:func:`hermes_cli.model_switch.list_picker_providers`) so the
-    row shape stays in one place. Returns ``None`` when no MoA presets exist.
+    row shape stays in one place.
+
+    IMPORTANT: unlike the one-shot ``/moa`` command, the provider picker should
+    only expose MoA when the user explicitly enabled it in raw config.yaml.
+    ``load_config()`` always supplies the default bundled MoA preset via
+    ``DEFAULT_CONFIG``, so blindly normalizing ``load_config().get("moa")``
+    makes MoA appear for everyone even when they never configured it.
     """
     try:
         from hermes_cli.config import load_config
         from hermes_cli.moa_config import normalize_moa_config
 
+        if not _raw_config_has_enabled_moa_preset():
+            return None
+
         cfg = normalize_moa_config(load_config().get("moa") or {})
-        models = list(cfg.get("presets", {}).keys())
+        models = [
+            name
+            for name, preset in (cfg.get("presets") or {}).items()
+            if isinstance(preset, dict) and preset.get("enabled", True)
+        ]
         if not models:
             return None
         return {

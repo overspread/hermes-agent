@@ -1001,6 +1001,15 @@ DEFAULT_CONFIG = {
     "fallback_providers": [],
     "credential_pool_strategies": {},
     "toolsets": ["hermes-cli"],
+    # Model routing preferences — controls how Hermes resolves ambiguous model
+    # names that appear under multiple configured providers.  When a typed
+    # model name (e.g. ``deepseek-v4-flash``) is declared by more than one
+    # user/custom provider, the first provider listed here wins instead of
+    # raising an ambiguity error.  Empty / absent = fall back to legacy
+    # sorted-first behaviour (no error, just picks alphabetically).
+    "model_routing": {
+        "preferred_providers": [],
+    },
     # Global active chat session cap across CLI, TUI/dashboard, and messaging.
     # None/0 = unbounded.
     "max_concurrent_sessions": None,
@@ -6841,9 +6850,18 @@ def _strip_default_values(
     when the user has nothing to say about them.
     """
     preserve_keys = {("_config_version",)} | set(preserve_keys or ())
+    _STRIP = object()
+
+    def _is_provider_model_declaration(path: Tuple[str, ...]) -> bool:
+        # Provider model catalogs commonly use ``model-id: null`` as a valid
+        # declaration.  ``None`` is also the strip sentinel's old value, so these
+        # paths need an explicit keep rule even when the value equals the
+        # missing/default value.  Without this, Telegram /model persistence can
+        # delete entries like ``providers.maoyulin.models.deepseek-v4-flash``.
+        return len(path) >= 4 and path[0] == "providers" and path[2] == "models"
 
     def _strip(value: Any, default: Any, path: Tuple[str, ...]) -> Any:
-        if path in preserve_keys:
+        if path in preserve_keys or _is_provider_model_declaration(path):
             return copy.deepcopy(value)
 
         if isinstance(value, dict) and value:
@@ -6852,22 +6870,22 @@ def _strip_default_values(
             for key, child in value.items():
                 child_default = default_dict.get(key)
                 stripped_child = _strip(child, child_default, path + (key,))
-                if stripped_child is not None:
+                if stripped_child is not _STRIP:
                     stripped[key] = stripped_child
             if stripped:
                 return stripped
             # Entire subtree stripped — remove it
-            return None
+            return _STRIP
 
         if value == default:
-            return None
+            return _STRIP
 
         return copy.deepcopy(value)
 
     result: Dict[str, Any] = {}
     for key, value in config.items():
         stripped = _strip(value, defaults.get(key), (key,))
-        if stripped is not None:
+        if stripped is not _STRIP:
             result[key] = stripped
     return result
 
@@ -7526,6 +7544,27 @@ _COMMENTED_SECTIONS = """
 """
 
 
+def _model_provider_cache_fingerprint(config: Any) -> Dict[str, Any]:
+    """Return the config subset that controls model/provider picker rows."""
+    if not isinstance(config, dict):
+        return {}
+    return {
+        "model": copy.deepcopy(config.get("model")),
+        "providers": copy.deepcopy(config.get("providers")),
+        "custom_providers": copy.deepcopy(config.get("custom_providers")),
+        "fallback_model": copy.deepcopy(config.get("fallback_model")),
+    }
+
+
+def _clear_provider_models_cache_after_config_change() -> None:
+    try:
+        from hermes_cli.models import clear_provider_models_cache
+
+        clear_provider_models_cache()
+    except Exception:
+        pass
+
+
 def save_config(
     config: Dict[str, Any],
     *,
@@ -7591,12 +7630,14 @@ def save_config(
             if _raw_for_paths
             else {}
         )
+        old_model_provider_fp = _model_provider_cache_fingerprint(raw_existing)
         if raw_existing:
             normalized = _preserve_env_ref_templates(
                 normalized,
                 raw_existing,
                 _LAST_EXPANDED_CONFIG_BY_PATH.get(str(config_path)),
             )
+        new_model_provider_fp = _model_provider_cache_fingerprint(normalized)
 
         # Strip schema-default values so the user's custom settings are not
         # silently reset on every save.  Keys the user explicitly set (paths
@@ -7640,6 +7681,8 @@ def save_config(
         _secure_file(config_path)
         _RAW_CONFIG_CACHE.pop(str(config_path), None)
         _LAST_EXPANDED_CONFIG_BY_PATH[str(config_path)] = copy.deepcopy(current_normalized)
+        if old_model_provider_fp != new_model_provider_fp:
+            _clear_provider_models_cache_after_config_change()
 
 
 def _parse_env_value(raw_value: str) -> str:
@@ -8792,6 +8835,7 @@ def set_config_value(key: str, value: str, force: bool = False):
                 user_config = fast_safe_load(f) or {}
         except Exception:
             user_config = {}
+    old_model_provider_fp = _model_provider_cache_fingerprint(user_config)
     
     # Handle nested keys (e.g., "tts.provider") including numeric list
     # indices (e.g., "custom_providers.0.api_key").  Delegates to
@@ -8827,6 +8871,8 @@ def set_config_value(key: str, value: str, force: bool = False):
     ensure_hermes_home()
     from utils import atomic_yaml_write
     atomic_yaml_write(config_path, user_config, sort_keys=False)
+    if old_model_provider_fp != _model_provider_cache_fingerprint(user_config):
+        _clear_provider_models_cache_after_config_change()
     
     # Keep .env in sync for keys that terminal_tool reads directly from env vars.
     # config.yaml is authoritative, but terminal_tool only reads TERMINAL_ENV etc.
