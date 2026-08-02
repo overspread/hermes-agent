@@ -1971,7 +1971,7 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
             extra = {}
             if base_url_host_matches(base_url, "api.kimi.com"):
                 extra["default_headers"] = {"User-Agent": "claude-code/0.1.0"}
-            elif base_url_host_matches(base_url, "maoyulin.xyz") or base_url_host_matches(base_url, "muyuan.do") or base_url_host_matches(base_url, "fuxingapi.com"):
+            elif base_url_host_matches(base_url, "maoyulin.xyz") or base_url_host_matches(base_url, "muyuan.do") or base_url_host_matches(base_url, "fuxingapi.com") or base_url_host_matches(base_url, "openoneapi.com"):
                 extra["default_headers"] = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
             elif base_url_host_matches(base_url, "githubcopilot.com"):
                 from hermes_cli.models import copilot_default_headers
@@ -2013,7 +2013,7 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
         extra = {}
         if base_url_host_matches(base_url, "api.kimi.com"):
             extra["default_headers"] = {"User-Agent": "claude-code/0.1.0"}
-        elif base_url_host_matches(base_url, "maoyulin.xyz") or base_url_host_matches(base_url, "muyuan.do") or base_url_host_matches(base_url, "fuxingapi.com"):
+        elif base_url_host_matches(base_url, "maoyulin.xyz") or base_url_host_matches(base_url, "muyuan.do") or base_url_host_matches(base_url, "fuxingapi.com") or base_url_host_matches(base_url, "openoneapi.com"):
             extra["default_headers"] = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
         elif base_url_host_matches(base_url, "githubcopilot.com"):
             from hermes_cli.models import copilot_default_headers
@@ -4627,7 +4627,7 @@ def _to_async_client(sync_client, model: str, is_vision: bool = False):
         )
     elif base_url_host_matches(sync_base_url, "api.kimi.com"):
         async_kwargs["default_headers"] = {"User-Agent": "claude-code/0.1.0"}
-    elif base_url_host_matches(sync_base_url, "maoyulin.xyz") or base_url_host_matches(sync_base_url, "muyuan.do") or base_url_host_matches(sync_base_url, "fuxingapi.com"):
+    elif base_url_host_matches(sync_base_url, "maoyulin.xyz") or base_url_host_matches(sync_base_url, "muyuan.do") or base_url_host_matches(sync_base_url, "fuxingapi.com") or base_url_host_matches(sync_base_url, "openoneapi.com"):
         async_kwargs["default_headers"] = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
     elif base_url_host_matches(sync_base_url, "integrate.api.nvidia.com"):
         async_kwargs["default_headers"] = build_nvidia_nim_headers(sync_base_url)
@@ -4952,7 +4952,7 @@ def resolve_provider_client(
                 extra["default_query"] = _dq
             if base_url_host_matches(custom_base, "api.kimi.com"):
                 extra["default_headers"] = {"User-Agent": "claude-code/0.1.0"}
-            elif base_url_host_matches(custom_base, "maoyulin.xyz") or base_url_host_matches(custom_base, "muyuan.do") or base_url_host_matches(custom_base, "fuxingapi.com"):
+            elif base_url_host_matches(custom_base, "maoyulin.xyz") or base_url_host_matches(custom_base, "muyuan.do") or base_url_host_matches(custom_base, "fuxingapi.com") or base_url_host_matches(custom_base, "openoneapi.com"):
                 extra["default_headers"] = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
             elif base_url_host_matches(custom_base, "githubcopilot.com"):
                 from hermes_cli.copilot_auth import copilot_request_headers
@@ -5211,7 +5211,7 @@ def resolve_provider_client(
         headers = {}
         if base_url_host_matches(base_url, "api.kimi.com"):
             headers["User-Agent"] = "claude-code/0.1.0"
-        elif base_url_host_matches(base_url, "maoyulin.xyz") or base_url_host_matches(base_url, "muyuan.do") or base_url_host_matches(base_url, "fuxingapi.com"):
+        elif base_url_host_matches(base_url, "maoyulin.xyz") or base_url_host_matches(base_url, "muyuan.do") or base_url_host_matches(base_url, "fuxingapi.com") or base_url_host_matches(base_url, "openoneapi.com"):
             headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
         elif base_url_host_matches(base_url, "githubcopilot.com"):
             from hermes_cli.copilot_auth import copilot_request_headers

@@ -995,7 +995,7 @@ def init_agent(
                 client_kwargs["default_headers"] = {
                     "User-Agent": "claude-code/0.1.0",
                 }
-            elif base_url_host_matches(effective_base, "maoyulin.xyz") or base_url_host_matches(effective_base, "muyuan.do") or base_url_host_matches(effective_base, "fuxingapi.com"):
+            elif base_url_host_matches(effective_base, "maoyulin.xyz") or base_url_host_matches(effective_base, "muyuan.do") or base_url_host_matches(effective_base, "fuxingapi.com") or base_url_host_matches(effective_base, "openoneapi.com"):
                 client_kwargs["default_headers"] = {
                     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
                 }
