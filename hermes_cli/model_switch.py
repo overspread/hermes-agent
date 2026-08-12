@@ -2010,7 +2010,7 @@ def list_authenticated_providers(
     from hermes_cli.models import (
         OPENROUTER_MODELS, _PROVIDER_MODELS,
         _MODELS_DEV_PREFERRED, _merge_with_models_dev, cached_provider_model_ids,
-        clear_provider_models_cache, get_curated_nous_model_ids,
+        clear_provider_models_cache, get_curated_nous_model_ids, partition_free_models_first,
     )
 
     # Explicit refresh: drop every provider's cached model-id list so the
@@ -2113,7 +2113,20 @@ def list_authenticated_providers(
 
     # Build curated model lists keyed by hermes provider ID
     curated: dict[str, list[str]] = dict(_PROVIDER_MODELS)
-    curated["openrouter"] = [mid for mid, _ in OPENROUTER_MODELS]
+    # Allow user to override OpenRouter model list from config.yaml
+    # (like sensenova's discover_models: false + manual models: list)
+    _or_cfg_models = None
+    try:
+        from hermes_cli.config import load_config
+        _cfg = load_config()
+        _or_cfg = _cfg.get("providers", {}).get("openrouter", {})
+        if isinstance(_or_cfg, dict) and _or_cfg.get("discover_models") is False:
+            _or_models = _or_cfg.get("models", {})
+            if isinstance(_or_models, dict) and _or_models:
+                _or_cfg_models = list(_or_models.keys())
+    except Exception:
+        pass
+    curated["openrouter"] = _or_cfg_models if _or_cfg_models else [mid for mid, _ in OPENROUTER_MODELS]
     # "nous" pulls from the remote model-catalog manifest published at
     # https://hermes-agent.nousresearch.com/docs/api/model-catalog.json so
     # newly added Portal models surface in the /model picker without
@@ -2246,11 +2259,15 @@ def list_authenticated_providers(
         # /model picker sees the SAME list `hermes model` would build, with
         # disk caching to keep the picker open snappy. Falls back to the
         # curated static list when the live fetcher returns nothing.
-        model_ids = cached_provider_model_ids(hermes_id)
-        if not model_ids:
-            model_ids = curated.get(hermes_id, [])
-            if hermes_id in _MODELS_DEV_PREFERRED:
-                model_ids = _merge_with_models_dev(hermes_id, model_ids)
+        # For OpenRouter, respect discover_models: false from config.yaml
+        if hermes_id == "openrouter" and _or_cfg_models is not None:
+            model_ids = _or_cfg_models
+        else:
+            model_ids = cached_provider_model_ids(hermes_id)
+            if not model_ids:
+                model_ids = curated.get(hermes_id, [])
+                if hermes_id in _MODELS_DEV_PREFERRED:
+                    model_ids = _merge_with_models_dev(hermes_id, model_ids)
         # A providers.<built-in>.models block extends the provider's discovered
         # catalog. Section 3 cannot emit it later because this built-in row owns
         # the slug, so merge declarations here before applying max_models.
@@ -2260,6 +2277,7 @@ def list_authenticated_providers(
             if isinstance(configured, dict):
                 configured_models = _declared_model_ids(configured.get("models"))
         model_ids = list(dict.fromkeys([*configured_models, *model_ids]))
+        model_ids = partition_free_models_first(model_ids)
         total = len(model_ids)
         if hermes_id in _UNCAPPED_PICKER_PROVIDERS:
             top = model_ids  # Aggregator: show full catalog regardless of max_models
@@ -2527,9 +2545,14 @@ def list_authenticated_providers(
                 _cp_model_ids = curated.get(_cp.slug, [])
         else:
             # Unified pathway — same as sections 1 and 2.
-            _cp_model_ids = cached_provider_model_ids(_cp.slug)
-            if not _cp_model_ids:
-                _cp_model_ids = curated.get(_cp.slug, [])
+            # For OpenRouter, respect discover_models: false from config.yaml
+            if _cp.slug == "openrouter" and _or_cfg_models is not None:
+                _cp_model_ids = _or_cfg_models
+            else:
+                _cp_model_ids = cached_provider_model_ids(_cp.slug)
+                if not _cp_model_ids:
+                    _cp_model_ids = curated.get(_cp.slug, [])
+        _cp_model_ids = partition_free_models_first(_cp_model_ids)
         _cp_total = len(_cp_model_ids)
         _cp_top = _cp_model_ids[:max_models] if max_models is not None else _cp_model_ids
 

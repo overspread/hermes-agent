@@ -158,6 +158,40 @@ class TestDetectProviderForModel:
         assert detect_provider_for_model("gpt-5.4", "custom:foo") is None
 
 
+class TestPartitionFreeModelsFirst:
+    def test_partition_strings(self):
+        from hermes_cli.models import partition_free_models_first
+        input_models = [
+            "openai/gpt-4o",
+            "deepseek/deepseek-v3-free",
+            "anthropic/claude-3.5-sonnet",
+            "poolside/laguna-m.1:free",
+        ]
+        expected = [
+            "deepseek/deepseek-v3-free",
+            "poolside/laguna-m.1:free",
+            "openai/gpt-4o",
+            "anthropic/claude-3.5-sonnet",
+        ]
+        assert partition_free_models_first(input_models) == expected
+
+    def test_partition_tuples(self):
+        from hermes_cli.models import partition_free_models_first
+        input_tuples = [
+            ("openai/gpt-4o", ""),
+            ("meta/llama-3.3-70b", "free"),
+            ("anthropic/claude-3-opus", ""),
+            ("nvidia/nemotron:free", ""),
+        ]
+        expected = [
+            ("meta/llama-3.3-70b", "free"),
+            ("nvidia/nemotron:free", ""),
+            ("openai/gpt-4o", ""),
+            ("anthropic/claude-3-opus", ""),
+        ]
+        assert partition_free_models_first(input_tuples) == expected
+
+
 
 
 class TestIsNousFreeTier:

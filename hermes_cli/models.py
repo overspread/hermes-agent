@@ -1494,6 +1494,32 @@ def _openrouter_model_supports_tools(item: Any) -> bool:
     return "tools" in params
 
 
+def is_free_model(item: Any) -> bool:
+    """Return True if a model entry (tuple or string) represents a free model."""
+    if isinstance(item, tuple):
+        mid = item[0] if len(item) > 0 else ""
+        desc = item[1] if len(item) > 1 else ""
+    elif isinstance(item, str):
+        mid = item
+        desc = ""
+    else:
+        return False
+
+    mid_lower = str(mid or "").strip().lower()
+    desc_lower = str(desc or "").strip().lower()
+
+    return "free" in mid_lower or "free" in desc_lower
+
+
+def partition_free_models_first(models: list[Any]) -> list[Any]:
+    """Stable partition a list of models (strings or (id, desc) tuples) so free models come first."""
+    if not models:
+        return list(models)
+    free_models = [m for m in models if is_free_model(m)]
+    paid_models = [m for m in models if not is_free_model(m)]
+    return free_models + paid_models
+
+
 def fetch_openrouter_models(
     timeout: float = 8.0,
     *,
@@ -1561,6 +1587,12 @@ def fetch_openrouter_models(
 
     if not curated:
         return list(_openrouter_catalog_cache or fallback)
+
+    # Keep the interactive picker practical: OpenRouter's curated manifest is
+    # quality-first, while the Telegram /model flow is often used to find a
+    # zero-cost model quickly. Stable-partition verified free entries ahead of
+    # paid entries without changing their relative order inside either group.
+    curated = partition_free_models_first(curated)
 
     first_id, first_desc = curated[0]
     if not first_desc:
@@ -2250,11 +2282,13 @@ def curated_models_for_provider(
     # Try live API first (Codex, Nous, etc. all support /models)
     live = provider_model_ids(normalized)
     if live:
-        return [(m, "") for m in live]
+        res = [(m, "") for m in live]
+        return partition_free_models_first(res)
 
     # Fallback to static catalog
     models = _PROVIDER_MODELS.get(normalized, [])
-    return [(m, "") for m in models]
+    res = [(m, "") for m in models]
+    return partition_free_models_first(res)
 
 
 def _provider_keys(provider: str) -> set[str]:
@@ -3262,13 +3296,13 @@ def cached_provider_model_ids(
     ):
         age = now - float(entry.get("at", 0))
         if age < ttl_seconds:
-            return list(entry["models"])
+            return partition_free_models_first(list(entry["models"]))
         if age < _PROVIDER_MODELS_STALE_SERVE_MAX:
             # Stale-while-revalidate: serve the expired entry immediately so
             # interactive picker opens never block on serial /v1/models
             # round-trips; refresh the cache off-thread for the next open.
             _spawn_swr_refresh(normalized)
-            return list(entry["models"])
+            return partition_free_models_first(list(entry["models"]))
 
     # Cache miss / stale / forced refresh — call the live path.
     live = provider_model_ids(normalized, force_refresh=force_refresh)
@@ -3279,7 +3313,7 @@ def cached_provider_model_ids(
             "models": list(live),
         }
         _save_provider_models_cache(cache)
-        return list(live)
+        return partition_free_models_first(list(live))
 
     # Live fetch returned nothing. If we have a stale entry with the
     # SAME fingerprint, prefer it over an empty result — stale data
@@ -3290,8 +3324,8 @@ def cached_provider_model_ids(
         and isinstance(entry.get("models"), list)
         and entry["models"]
     ):
-        return list(entry["models"])
-    return list(live or [])
+        return partition_free_models_first(list(entry["models"]))
+    return partition_free_models_first(list(live or []))
 
 
 def clear_provider_models_cache(provider: Optional[str] = None) -> None:
