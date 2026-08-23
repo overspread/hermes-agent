@@ -4972,6 +4972,10 @@ def set_config_value(key: str, value: str, force: bool = False):
     is_known, suggestion = _validate_config_key(key)
 
     # Otherwise it goes to config.yaml
+    with open(get_config_path(), encoding="utf-8") as _raw_config:
+        old_model_provider_fp = _model_provider_cache_fingerprint(
+            fast_safe_load(_raw_config) or {}
+        )
     # Read the raw user config (not merged with defaults) to avoid
     # dumping all default values back to the file
     config_path = get_config_path()
